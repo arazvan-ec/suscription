@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:schemaLocation="http://doctrine-project.org/schemas/orm/doctrine-mapping
+                  https://www.doctrine-project.org/schemas/orm/doctrine-mapping.xsd">
+
+    <entity name="App\Domain\Campaign" table="campaigns">
+        <id name="id" type="uuid" column="id"/>
+
+        <field name="editorialId" type="string" column="editorial_id" length="255"/>
+        <field name="scheduledAt" type="datetime_immutable" column="scheduled_at"/>
+        <field name="status" type="string" column="status" length="20"
+               enumType="App\Domain\CampaignStatus"/>
+        <field name="mailchimpCampaignId" type="string" column="mailchimp_campaign_id"
+               length="255" nullable="true"/>
+        <field name="retryCount" type="integer" column="retry_count"/>
+        <field name="errorType" type="string" column="error_type" length="20" nullable="true"
+               enumType="App\Domain\ErrorType"/>
+        <field name="errorMessage" type="text" column="error_message" nullable="true"/>
+        <field name="createdAt" type="datetime_immutable" column="created_at"/>
+        <field name="updatedAt" type="datetime_immutable" column="updated_at"/>
+
+        <unique-constraints>
+            <unique-constraint columns="editorial_id,status" name="uniq_editorial_scheduled"/>
+        </unique-constraints>
+
+        <indexes>
+            <index columns="status,scheduled_at" name="idx_status_scheduled"/>
+        </indexes>
+    </entity>
+</doctrine-mapping>

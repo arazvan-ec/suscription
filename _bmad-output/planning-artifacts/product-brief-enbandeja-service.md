@@ -1,6 +1,6 @@
 ---
 title: "Product Brief: enBandeja-service"
-status: "draft"
+status: "final"
 created: "2026-03-25"
 updated: "2026-03-25"
 inputs:
@@ -37,12 +37,12 @@ enBandeja-service consume eventos `editorial.published` de RabbitMQ — el mismo
 
 Mailchimp sigue haciendo lo que hace bien: gestionar audiencias, suscriptores, deliverability, tracking y compliance. enBandeja solo orquesta: decide cuando enviar, a quien, y con que contenido.
 
-La resolucion de datos es lazy — ocurre en el momento del envio, no cuando se recibe el evento. Esto significa que si un articulo cambia de titulo, se despublica, o el periodista cambia de audiencia entre la programacion y el envio, el sistema siempre trabaja con datos actualizados.
+Los datos se resuelven en el momento del envio, no cuando se recibe el evento. Esto garantiza que nunca se envia un email con un titulo que ya cambio, a una audiencia que ya no existe, o sobre un articulo que se despublico. Sin caches obsoletos, sin sorpresas.
 
 ## Que Hace Diferente a Este Enfoque
 
 - **Desacoplamiento real.** Cualquier CMS solo necesita publicar un evento. No sabe nada de emails, audiencias ni Mailchimp.
-- **Resolucion lazy.** No se cachean datos que pueden quedar obsoletos. Se resuelven frescos justo antes del envio. Si la editorial se despublica, se detecta y se cancela la campana sin logica extra.
+- **Datos siempre frescos.** Nunca se envia un email con datos obsoletos. Si el titulo cambio, se envia el nuevo. Si la editorial se despublico, se cancela. Sin logica extra, sin eventos adicionales.
 - **Visibilidad.** La tabla de campanas es un registro de todo: que se programo, que se envio, que fallo y por que. El responsable de producto puede consultar el estado en cualquier momento.
 - **Idempotencia y resiliencia.** Eventos duplicados se ignoran. Errores transitorios se reintentan. Errores permanentes se cancelan sin gastar reintentos. El worker se reconcilia con Mailchimp al arrancar.
 
@@ -59,7 +59,7 @@ La resolucion de datos es lazy — ocurre en el momento del envio, no cuando se 
 - **Paridad funcional.** Los emails salen como antes — mismo contenido, misma audiencia, misma experiencia para el suscriptor.
 - **Delorean liberado.** La responsabilidad de notificaciones se elimina completamente de Delorean.
 - **Dos CMS, un flujo.** Ambos CMS publican el mismo evento y enBandeja los trata igual.
-- **Visibilidad operativa.** El responsable de producto puede consultar el estado de cualquier campana.
+- **Visibilidad operativa.** El responsable de producto puede consultar el estado de cualquier campana. Errores criticos se loguean para accion inmediata.
 - **Resiliencia.** Ningun email se pierde por fallos transitorios (hasta 3 reintentos). Ningun email se envia dos veces (idempotencia + verificacion contra Mailchimp).
 
 ## Scope
@@ -73,15 +73,18 @@ La resolucion de datos es lazy — ocurre en el momento del envio, no cuando se 
 - Clasificacion de errores (transitorios vs permanentes)
 - Reintentos, cola de errores, reconciliacion al arrancar
 - Idempotencia por editorial_id
-- Migracion en corte limpio (dia X se apaga Delorean, se enciende enBandeja)
+- Migracion en corte limpio (dia X se apaga Delorean, se enciende enBandeja). Script de migracion en legacy para drenar pendientes
+- Log critico para errores que requieren intervencion manual
 
 **v1 NO incluye:**
 - Newsletters manuales (Trigger B)
 - Creacion automatica de audiencias en Mailchimp
 - Gestion propia de suscriptores o audiencias
-- Dashboard de analytics propio
+- Dashboard de analytics o monitoreo (v2)
 - Webhooks de Mailchimp para tracking de deliveries
-- Eventos de despublicacion o actualizacion (la validacion lazy lo cubre)
+- Eventos de despublicacion o actualizacion (la validacion al enviar lo cubre)
+- Preferencias granulares de suscriptor (frecuencia, temas)
+- A/B testing de contenido
 
 ## Vision
 

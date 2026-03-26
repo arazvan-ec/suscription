@@ -13,7 +13,7 @@ use App\Domain\PermanentErrorException;
 use App\Domain\EmailRendererInterface;
 use Psr\Log\LoggerInterface;
 
-final class CampaignProcessor
+final class CampaignProcessor implements CampaignProcessorInterface
 {
     public function __construct(
         private readonly EditorialServiceInterface $editorialService,

@@ -1,5 +1,5 @@
 ---
-stepsCompleted: ['step-01-init', 'step-02-discovery', 'step-02b-vision', 'step-02c-executive-summary', 'step-03-success']
+stepsCompleted: ['step-01-init', 'step-02-discovery', 'step-02b-vision', 'step-02c-executive-summary', 'step-03-success', 'step-04-journeys']
 inputDocuments:
   - _bmad-output/planning-artifacts/product-brief-enbandeja-service.md
   - _bmad-output/brainstorming/brainstorming-session-2026-03-25-2210.md
@@ -90,3 +90,51 @@ enBandeja reemplaza ese flujo con un servicio dedicado y event-driven que da a c
 - Preferencias granulares de suscriptor (frecuencia, temas)
 - A/B testing de contenido
 - Analytics de engagement por periodista y por tipo de contenido
+
+## User Journeys
+
+### Journey 1: Redactor publica editorial — Happy Path
+
+**Carlos**, redactor de deportes, termina su cronica del partido y programa la publicacion para manana a las 8:00. Pulsa "Publicar" en el CMS. No sabe nada de enBandeja, Mailchimp ni audiencias.
+
+A las 8:00 del dia siguiente, el CMS emite `editorial.published`. enBandeja recibe el evento, crea una campana con `scheduled_at = 8:00`, y como ya es la hora, el worker la recoge inmediatamente. Llama a editorial-service (titulo, URL), llama a journalist-service (nombre de Carlos, audience_id). Verifica que el articulo sigue publicado. Construye el HTML con Twig. Envia via Mailchimp a la audiencia de Carlos. Status: `done`.
+
+Los 12.000 suscriptores de Carlos reciben el email. Carlos no hizo nada extra. El email llego solo.
+
+### Journey 2: Editorial despublicada antes del envio — Edge Case
+
+**Laura**, editora jefa, detecta un error grave en un articulo programado para las 10:00. A las 9:55 despublica el articulo.
+
+A las 10:00 el worker recoge la campana. Llama a editorial-service para resolver datos. editorial-service responde que el articulo no esta publicado. enBandeja cancela la campana (status: `cancelled`). Ningun email se envia. Log informativo registrado.
+
+Laura no tuvo que hacer nada en enBandeja. El sistema se protege solo.
+
+### Journey 3: Responsable de producto investiga un fallo — Operations
+
+**Ana**, responsable de producto, recibe un aviso de que los suscriptores de un periodista no recibieron email ayer. Consulta la tabla `campaigns` filtrando por `editorial_id`.
+
+Encuentra la campana con status `failed` y 3 reintentos agotados. El log critico indica que Mailchimp devolvio 500 en los tres intentos. La campana esta en la cola de errores.
+
+Ana contacta a ops, verifican que Mailchimp tuvo una incidencia ayer, y re-ejecutan manualmente la campana desde la cola de errores. Status pasa a `done`.
+
+### Journey 4: Periodista sin audiencia — Edge Case
+
+**Miguel**, periodista nuevo, publica su primer articulo. El evento llega a enBandeja. El worker llama a journalist-service y obtiene `audience_id = null` — Miguel aun no tiene audiencia en Mailchimp.
+
+enBandeja detecta error permanente: cancela la campana (status: `cancelled`), loguea el motivo. No gasta reintentos. El log queda disponible para que el equipo sepa que Miguel necesita una audiencia.
+
+### Journey 5: Tormenta de eventos — Edge Case
+
+**El CMS legacy** tiene un bug y emite 5 veces el evento `editorial.published` para el mismo articulo en 2 minutos.
+
+enBandeja recibe el primer evento, crea la campana. Los 4 eventos siguientes encuentran que ya existe una campana `scheduled` para ese `editorial_id`. Los ignora. Un solo email se envia.
+
+### Journey Requirements Summary
+
+| Journey | Capacidades que revela |
+|---------|----------------------|
+| Happy path | Consumer RabbitMQ, tabla campaigns, worker, resolucion lazy, envio Mailchimp |
+| Despublicacion | Validacion de estado al enviar, cancelacion automatica |
+| Investigacion de fallo | Tabla consultable, log critico, cola de errores, reintento manual |
+| Sin audiencia | Clasificacion errores permanentes, cancelacion sin reintentos |
+| Tormenta de eventos | Idempotencia por editorial_id |

@@ -82,12 +82,14 @@ date: '2026-03-25'
 **Razon:** Solo necesitamos 3-4 endpoints. Un SDK anade dependencia innecesaria. El HTTP client de Symfony es suficiente.
 **Consecuencias:** Crear un `MailchimpClient` propio en la capa de infraestructura que encapsula las llamadas. Si Mailchimp cambia la API, solo cambia este archivo.
 
-### ADR-006: Worker como Symfony Command con cron
+### ADR-006: Dos consumers Messenger con Supervisor y delay en RabbitMQ
 
-**Contexto:** Necesitamos un proceso que recoja campanas programadas periodicamente.
-**Decision:** Symfony Command ejecutado por cron cada minuto.
-**Razon:** Simple, visible, facil de monitorizar. No necesitamos un daemon permanente para el volumen esperado.
-**Consecuencias:** El cron ejecuta `php bin/console app:send-campaigns`. Si la ejecucion anterior no ha terminado, un lock file previene ejecucion concurrente.
+**Contexto:** Necesitamos procesar campanas programadas para una fecha futura. Ya existe infraestructura Docker con Supervisor para gestionar consumers de Messenger.
+**Decision:** Dos consumers Messenger gestionados por Supervisor:
+- Consumer 1 (`editorial_published`): Recibe `editorial.published`, crea campana en BBDD, despacha mensaje `SendCampaign` con delay calculado (`scheduled_at - now`) via RabbitMQ delayed message plugin.
+- Consumer 2 (`send_campaign`): Recibe `SendCampaign` cuando el delay expira, valida que la campana sigue en status `scheduled`, resuelve datos lazy, y envia via Mailchimp.
+**Razon:** Encaja con la infraestructura existente (Supervisor + Messenger). El delay de RabbitMQ evita polling. La BBDD mantiene la visibilidad y permite cancelacion.
+**Consecuencias:** Requiere RabbitMQ delayed message exchange plugin. Si la campana se cancela antes del delay, el consumer 2 la ignora al ver status `cancelled`. Si el delay es 0 (publicacion inmediata), el mensaje se entrega inmediatamente.
 
 ### ADR-007: Clasificacion de errores en el dominio
 
@@ -107,13 +109,13 @@ date: '2026-03-25'
 **Clases PHP:**
 - Entidades: `Campaign` (singular, PascalCase)
 - Repositorios: `CampaignRepository`
-- Handlers: `EditorialPublishedHandler`
-- Commands: `SendCampaignsCommand`
+- Handlers: `EditorialPublishedHandler`, `SendCampaignHandler`
+- Commands: `ReconcileCampaignsCommand`
 - Clients: `MailchimpClient`, `EditorialServiceClient`, `JournalistServiceClient`
 - Exceptions: `TransientErrorException`, `PermanentErrorException`
 
 **Eventos:**
-- Messages de Messenger: `EditorialPublished`
+- Messages de Messenger: `EditorialPublished`, `SendCampaign`
 
 ### Structure Patterns
 
@@ -158,12 +160,14 @@ src/
 │
 ├── Application/
 │   ├── Handler/
-│   │   └── EditorialPublishedHandler.php  # Consumer del evento RabbitMQ
+│   │   ├── EditorialPublishedHandler.php  # Consumer 1: recibe evento, crea campana, despacha SendCampaign
+│   │   └── SendCampaignHandler.php        # Consumer 2: resuelve datos, construye HTML, envia
 │   ├── Service/
 │   │   ├── CampaignProcessor.php          # Orquesta: resolver datos, construir HTML, enviar
 │   │   └── CampaignReconciler.php         # Reconcilia campanas 'sending' al arrancar
 │   └── Message/
-│       └── EditorialPublished.php         # Message class para Messenger
+│       ├── EditorialPublished.php         # Message del evento RabbitMQ
+│       └── SendCampaign.php               # Message delayed para envio programado
 │
 ├── Infrastructure/
 │   ├── Client/
@@ -175,7 +179,7 @@ src/
 │   ├── Rendering/
 │   │   └── TwigEmailRenderer.php          # Construye HTML con Twig
 │   └── Command/
-│       └── SendCampaignsCommand.php       # Symfony Command para el cron worker
+│       └── ReconcileCampaignsCommand.php  # Symfony Command para reconciliacion manual
 │
 templates/
 └── email/
@@ -203,11 +207,12 @@ migrations/
 
 | Punto | Protocolo | Direccion |
 |-------|-----------|-----------|
-| RabbitMQ → EditorialPublishedHandler | AMQP via Messenger | Entrada |
+| RabbitMQ → EditorialPublishedHandler | AMQP via Messenger | Entrada (consumer 1) |
+| EditorialPublishedHandler → RabbitMQ (delayed) | AMQP via Messenger | Salida (despacha SendCampaign) |
+| RabbitMQ → SendCampaignHandler | AMQP via Messenger | Entrada (consumer 2, tras delay) |
 | CampaignProcessor → EditorialServiceClient | HTTP GET | Salida |
 | CampaignProcessor → JournalistServiceClient | HTTP GET | Salida |
 | CampaignProcessor → MailchimpClient | HTTP POST/PUT | Salida |
-| Cron → SendCampaignsCommand | CLI | Entrada |
 
 ## Architecture Validation Results
 

@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Rendering;
 
+use App\Domain\EmailRendererInterface;
 use App\Domain\PermanentErrorException;
 use Twig\Environment;
 
-final class TwigEmailRenderer
+final class TwigEmailRenderer implements EmailRendererInterface
 {
     public function __construct(
         private readonly Environment $twig,

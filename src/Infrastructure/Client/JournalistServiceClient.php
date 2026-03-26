@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Infrastructure\Client;
 
 use App\Domain\JournalistData;
+use App\Domain\JournalistServiceInterface;
 use App\Domain\PermanentErrorException;
 use App\Domain\TransientErrorException;
 use Http\Client\HttpClient;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Psr\Http\Client\ClientExceptionInterface;
 
-final class JournalistServiceClient
+final class JournalistServiceClient implements JournalistServiceInterface
 {
     private readonly Psr17Factory $factory;
 

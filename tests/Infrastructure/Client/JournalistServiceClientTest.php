@@ -7,20 +7,21 @@ namespace App\Tests\Infrastructure\Client;
 use App\Domain\PermanentErrorException;
 use App\Domain\TransientErrorException;
 use App\Infrastructure\Client\JournalistServiceClient;
+use Http\Mock\Client as MockClient;
+use Nyholm\Psr7\Response;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\HttpClient\MockHttpClient;
-use Symfony\Component\HttpClient\Response\MockResponse;
 
 final class JournalistServiceClientTest extends TestCase
 {
     public function testGetJournalistReturnsData(): void
     {
-        $mockResponse = new MockResponse(json_encode([
+        $mockClient = new MockClient();
+        $mockClient->addResponse(new Response(200, [], json_encode([
             'name' => 'Carlos Garcia',
             'audience_id' => 'mc-audience-789',
-        ]));
+        ])));
 
-        $client = new JournalistServiceClient(new MockHttpClient($mockResponse));
+        $client = new JournalistServiceClient($mockClient, 'https://journalist.test');
         $journalist = $client->getJournalist('journalist-456');
 
         $this->assertSame('Carlos Garcia', $journalist->name);
@@ -29,11 +30,12 @@ final class JournalistServiceClientTest extends TestCase
 
     public function testGetJournalistWithNullAudience(): void
     {
-        $mockResponse = new MockResponse(json_encode([
+        $mockClient = new MockClient();
+        $mockClient->addResponse(new Response(200, [], json_encode([
             'name' => 'Miguel Nuevo',
-        ]));
+        ])));
 
-        $client = new JournalistServiceClient(new MockHttpClient($mockResponse));
+        $client = new JournalistServiceClient($mockClient, 'https://journalist.test');
         $journalist = $client->getJournalist('journalist-new');
 
         $this->assertSame('Miguel Nuevo', $journalist->name);
@@ -42,8 +44,10 @@ final class JournalistServiceClientTest extends TestCase
 
     public function testGetJournalistThrowsTransientOnServerError(): void
     {
-        $mockResponse = new MockResponse('', ['http_code' => 503]);
-        $client = new JournalistServiceClient(new MockHttpClient($mockResponse));
+        $mockClient = new MockClient();
+        $mockClient->addResponse(new Response(503));
+
+        $client = new JournalistServiceClient($mockClient, 'https://journalist.test');
 
         $this->expectException(TransientErrorException::class);
         $this->expectExceptionMessage('journalist-service returned 503');
@@ -53,8 +57,10 @@ final class JournalistServiceClientTest extends TestCase
 
     public function testGetJournalistThrowsPermanentOnNotFound(): void
     {
-        $mockResponse = new MockResponse('', ['http_code' => 404]);
-        $client = new JournalistServiceClient(new MockHttpClient($mockResponse));
+        $mockClient = new MockClient();
+        $mockClient->addResponse(new Response(404));
+
+        $client = new JournalistServiceClient($mockClient, 'https://journalist.test');
 
         $this->expectException(PermanentErrorException::class);
 
@@ -63,8 +69,13 @@ final class JournalistServiceClientTest extends TestCase
 
     public function testGetJournalistThrowsTransientOnNetworkError(): void
     {
-        $mockResponse = new MockResponse('', ['error' => 'Connection refused']);
-        $client = new JournalistServiceClient(new MockHttpClient($mockResponse));
+        $mockClient = new MockClient();
+        $mockClient->addException(new \Http\Client\Exception\NetworkException(
+            'Connection refused',
+            new \Nyholm\Psr7\Request('GET', 'https://journalist.test/journalists/journalist-456'),
+        ));
+
+        $client = new JournalistServiceClient($mockClient, 'https://journalist.test');
 
         $this->expectException(TransientErrorException::class);
         $this->expectExceptionMessage('journalist-service unavailable');

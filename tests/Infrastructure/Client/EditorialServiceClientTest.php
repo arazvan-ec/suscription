@@ -7,23 +7,24 @@ namespace App\Tests\Infrastructure\Client;
 use App\Domain\PermanentErrorException;
 use App\Domain\TransientErrorException;
 use App\Infrastructure\Client\EditorialServiceClient;
+use Http\Mock\Client as MockClient;
+use Nyholm\Psr7\Response;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\HttpClient\MockHttpClient;
-use Symfony\Component\HttpClient\Response\MockResponse;
 
 final class EditorialServiceClientTest extends TestCase
 {
     public function testGetEditorialReturnsData(): void
     {
-        $mockResponse = new MockResponse(json_encode([
+        $mockClient = new MockClient();
+        $mockClient->addResponse(new Response(200, [], json_encode([
             'title' => 'Match report: Real Madrid 3-1 Barcelona',
             'url' => 'https://example.com/articles/match-report',
             'scheduled_at' => '2026-03-26T08:00:00+00:00',
             'journalist_id' => 'journalist-456',
             'is_published' => true,
-        ]));
+        ])));
 
-        $client = new EditorialServiceClient(new MockHttpClient($mockResponse));
+        $client = new EditorialServiceClient($mockClient, 'https://editorial.test');
         $editorial = $client->getEditorial('ed-123');
 
         $this->assertSame('Match report: Real Madrid 3-1 Barcelona', $editorial->title);
@@ -34,8 +35,10 @@ final class EditorialServiceClientTest extends TestCase
 
     public function testGetEditorialThrowsTransientOnServerError(): void
     {
-        $mockResponse = new MockResponse('', ['http_code' => 500]);
-        $client = new EditorialServiceClient(new MockHttpClient($mockResponse));
+        $mockClient = new MockClient();
+        $mockClient->addResponse(new Response(500));
+
+        $client = new EditorialServiceClient($mockClient, 'https://editorial.test');
 
         $this->expectException(TransientErrorException::class);
         $this->expectExceptionMessage('editorial-service returned 500');
@@ -45,8 +48,10 @@ final class EditorialServiceClientTest extends TestCase
 
     public function testGetEditorialThrowsPermanentOnNotFound(): void
     {
-        $mockResponse = new MockResponse('', ['http_code' => 404]);
-        $client = new EditorialServiceClient(new MockHttpClient($mockResponse));
+        $mockClient = new MockClient();
+        $mockClient->addResponse(new Response(404));
+
+        $client = new EditorialServiceClient($mockClient, 'https://editorial.test');
 
         $this->expectException(PermanentErrorException::class);
 
@@ -55,8 +60,13 @@ final class EditorialServiceClientTest extends TestCase
 
     public function testGetEditorialThrowsTransientOnNetworkError(): void
     {
-        $mockResponse = new MockResponse('', ['error' => 'Connection timed out']);
-        $client = new EditorialServiceClient(new MockHttpClient($mockResponse));
+        $mockClient = new MockClient();
+        $mockClient->addException(new \Http\Client\Exception\NetworkException(
+            'Connection timed out',
+            new \Nyholm\Psr7\Request('GET', 'https://editorial.test/editorials/ed-123'),
+        ));
+
+        $client = new EditorialServiceClient($mockClient, 'https://editorial.test');
 
         $this->expectException(TransientErrorException::class);
         $this->expectExceptionMessage('editorial-service unavailable');

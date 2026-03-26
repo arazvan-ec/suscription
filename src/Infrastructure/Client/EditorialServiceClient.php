@@ -7,20 +7,26 @@ namespace App\Infrastructure\Client;
 use App\Domain\EditorialData;
 use App\Domain\PermanentErrorException;
 use App\Domain\TransientErrorException;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
-use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
+use Http\Client\HttpClient;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Psr\Http\Client\ClientExceptionInterface;
 
 final class EditorialServiceClient
 {
+    private readonly Psr17Factory $factory;
+
     public function __construct(
-        private readonly HttpClientInterface $editorialServiceClient,
+        private readonly HttpClient $editorialHttpClient,
+        private readonly string $baseUrl,
     ) {
+        $this->factory = new Psr17Factory();
     }
 
     public function getEditorial(string $editorialId): EditorialData
     {
         try {
-            $response = $this->editorialServiceClient->request('GET', "/editorials/{$editorialId}");
+            $request = $this->factory->createRequest('GET', $this->baseUrl . "/editorials/{$editorialId}");
+            $response = $this->editorialHttpClient->sendRequest($request);
             $statusCode = $response->getStatusCode();
 
             if ($statusCode >= 500) {
@@ -34,7 +40,7 @@ final class EditorialServiceClient
                 );
             }
 
-            $data = $response->toArray();
+            $data = json_decode($response->getBody()->getContents(), true, 512, \JSON_THROW_ON_ERROR);
 
             return new EditorialData(
                 title: $data['title'],
@@ -43,7 +49,7 @@ final class EditorialServiceClient
                 journalistId: $data['journalist_id'],
                 isPublished: $data['is_published'],
             );
-        } catch (TransportExceptionInterface $e) {
+        } catch (ClientExceptionInterface $e) {
             throw new TransientErrorException(
                 'editorial-service unavailable: ' . $e->getMessage(),
                 0,

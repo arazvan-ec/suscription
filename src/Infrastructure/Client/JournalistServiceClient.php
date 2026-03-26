@@ -7,20 +7,26 @@ namespace App\Infrastructure\Client;
 use App\Domain\JournalistData;
 use App\Domain\PermanentErrorException;
 use App\Domain\TransientErrorException;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
-use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
+use Http\Client\HttpClient;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Psr\Http\Client\ClientExceptionInterface;
 
 final class JournalistServiceClient
 {
+    private readonly Psr17Factory $factory;
+
     public function __construct(
-        private readonly HttpClientInterface $journalistServiceClient,
+        private readonly HttpClient $journalistHttpClient,
+        private readonly string $baseUrl,
     ) {
+        $this->factory = new Psr17Factory();
     }
 
     public function getJournalist(string $journalistId): JournalistData
     {
         try {
-            $response = $this->journalistServiceClient->request('GET', "/journalists/{$journalistId}");
+            $request = $this->factory->createRequest('GET', $this->baseUrl . "/journalists/{$journalistId}");
+            $response = $this->journalistHttpClient->sendRequest($request);
             $statusCode = $response->getStatusCode();
 
             if ($statusCode >= 500) {
@@ -34,13 +40,13 @@ final class JournalistServiceClient
                 );
             }
 
-            $data = $response->toArray();
+            $data = json_decode($response->getBody()->getContents(), true, 512, \JSON_THROW_ON_ERROR);
 
             return new JournalistData(
                 name: $data['name'],
                 audienceId: $data['audience_id'] ?? null,
             );
-        } catch (TransportExceptionInterface $e) {
+        } catch (ClientExceptionInterface $e) {
             throw new TransientErrorException(
                 'journalist-service unavailable: ' . $e->getMessage(),
                 0,

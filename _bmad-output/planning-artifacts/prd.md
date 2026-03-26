@@ -1,10 +1,15 @@
 ---
-stepsCompleted: ['step-01-init', 'step-02-discovery', 'step-02b-vision', 'step-02c-executive-summary', 'step-03-success', 'step-04-journeys']
+stepsCompleted: ['step-01-init', 'step-02-discovery', 'step-02b-vision', 'step-02c-executive-summary', 'step-03-success', 'step-04-journeys', 'step-05-domain', 'step-06-innovation', 'step-07-project-type', 'step-08-scoping', 'step-09-functional', 'step-10-nonfunctional', 'step-11-polish', 'step-12-complete']
 inputDocuments:
   - _bmad-output/planning-artifacts/product-brief-enbandeja-service.md
   - _bmad-output/brainstorming/brainstorming-session-2026-03-25-2210.md
   - _bmad-output/project-context.md
 workflowType: 'prd'
+classification:
+  projectType: 'api-microservice'
+  domain: 'media-publishing'
+  complexity: 'medium'
+  projectContext: 'greenfield'
 ---
 
 # Product Requirements Document - enBandeja-service
@@ -138,3 +143,145 @@ enBandeja recibe el primer evento, crea la campana. Los 4 eventos siguientes enc
 | Investigacion de fallo | Tabla consultable, log critico, cola de errores, reintento manual |
 | Sin audiencia | Clasificacion errores permanentes, cancelacion sin reintentos |
 | Tormenta de eventos | Idempotencia por editorial_id |
+
+## Domain-Specific Requirements
+
+### Integraciones Externas
+
+| Servicio | Contrato | Datos |
+|----------|----------|-------|
+| editorial-service | GET editorial por id | titulo, url, fecha publicacion, journalist_id, estado (publicado/no) |
+| journalist-service | GET periodista por id | nombre, audience_id de Mailchimp |
+| Mailchimp Marketing API | POST campaign, PUT campaign content, POST campaign send/schedule | campaign_id, status |
+| RabbitMQ | Consumer de `editorial.published` | editorial_id |
+
+### Restricciones Tecnicas
+
+- Symfony 7.2 como framework
+- PHP 8.4+
+- Doctrine ORM para persistencia
+- Symfony Messenger para consumir RabbitMQ
+- Twig para renderizado de email HTML
+
+### Riesgos de Integracion
+
+- **Mailchimp API rate limits.** Mitigacion: reaccionar a HTTP 429 con header `Retry-After`.
+- **Disponibilidad de servicios internos.** Mitigacion: timeout de 5 segundos + reintentos con backoff.
+- **Cambios en API de Mailchimp.** Mitigacion: encapsular integracion en capa de infraestructura, no acoplar dominio.
+
+## Microservice Specific Requirements
+
+### Modelo de Datos
+
+**Tabla `campaigns`:**
+
+| Campo | Tipo | Descripcion |
+|-------|------|-------------|
+| id | UUID | Identificador unico |
+| editorial_id | string | ID de la editorial (unique constraint con status scheduled) |
+| scheduled_at | datetime | Fecha/hora de envio programado |
+| status | enum | scheduled, sending, done, cancelled, failed |
+| mailchimp_campaign_id | string nullable | ID de la campana en Mailchimp |
+| retry_count | int | Numero de reintentos realizados (max 3) |
+| error_type | enum nullable | transient, permanent |
+| error_message | text nullable | Detalle del error |
+| created_at | datetime | Fecha de creacion |
+| updated_at | datetime | Ultima actualizacion |
+
+### Evento de Entrada
+
+**`editorial.published`:**
+
+```json
+{
+  "editorial_id": "string"
+}
+```
+
+Schema minimo. enBandeja resuelve todo lo demas via llamadas a servicios.
+
+### Flujo del Worker
+
+1. Query: `SELECT * FROM campaigns WHERE scheduled_at <= NOW() AND status = 'scheduled'`
+2. Para cada campana (en paralelo):
+   a. Cambiar status a `sending`
+   b. Llamar a editorial-service → obtener datos del articulo + verificar estado publicado
+   c. Si no publicado → cancelar campana, fin
+   d. Llamar a journalist-service → obtener nombre + audience_id
+   e. Si audience_id null → cancelar campana (error permanente), fin
+   f. Construir HTML con Twig
+   g. Verificar si ya existe campana en Mailchimp (por mailchimp_campaign_id)
+   h. Si no existe → crear campana en Mailchimp, guardar mailchimp_campaign_id
+   i. Enviar campana via Mailchimp API
+   j. Cambiar status a `done`
+3. Si error transitorio → incrementar retry_count, volver a `scheduled`
+4. Si retry_count >= 3 → mover a cola de errores, log critico, status `failed`
+5. Si error permanente → cancelar directo, status `cancelled`, log
+
+### Reconciliacion al Arrancar
+
+Al iniciar el worker:
+1. Query: `SELECT * FROM campaigns WHERE status = 'sending'`
+2. Para cada una: consultar Mailchimp por mailchimp_campaign_id
+3. Si Mailchimp confirma envio → status `done`
+4. Si Mailchimp no tiene la campana → volver a `scheduled` para reprocesar
+
+## Functional Requirements
+
+### FR-100: Ingesta de Eventos
+
+- **FR-101:** El sistema consume eventos `editorial.published` de RabbitMQ con acknowledgement manual.
+- **FR-102:** Al recibir un evento, el sistema verifica si ya existe una campana `scheduled` para ese `editorial_id`. Si existe, ignora el evento (idempotencia).
+- **FR-103:** Si no existe campana, el sistema crea un registro en `campaigns` con status `scheduled` y `scheduled_at` igual a la fecha de publicacion de la editorial.
+
+### FR-200: Resolucion de Datos
+
+- **FR-201:** El worker resuelve datos de la editorial llamando a editorial-service (titulo, URL, fecha publicacion, journalist_id, estado).
+- **FR-202:** El worker resuelve datos del periodista llamando a journalist-service (nombre, audience_id).
+- **FR-203:** Si la editorial no esta publicada al momento del envio, el sistema cancela la campana automaticamente.
+- **FR-204:** Si el periodista no tiene audience_id, el sistema cancela la campana como error permanente.
+- **FR-205:** Timeout de 5 segundos para llamadas a servicios externos.
+
+### FR-300: Construccion y Envio
+
+- **FR-301:** El sistema construye el HTML del email usando Twig con: texto generico, nombre del periodista, enlace al articulo.
+- **FR-302:** El sistema crea una campana en Mailchimp via Marketing API asociada a la audience del periodista.
+- **FR-303:** El sistema envia la campana via Mailchimp API.
+- **FR-304:** El sistema almacena el `mailchimp_campaign_id` en la tabla `campaigns`.
+- **FR-305:** Antes de crear campana en Mailchimp, el sistema verifica si ya existe una (por `mailchimp_campaign_id`) para evitar duplicados.
+
+### FR-400: Programacion y Worker
+
+- **FR-401:** El worker ejecuta periodicamente (cada minuto) y recoge campanas donde `scheduled_at <= NOW()` y status `scheduled`.
+- **FR-402:** El worker procesa campanas en paralelo con timeout de 5 segundos por llamada externa.
+- **FR-403:** Al arrancar, el worker ejecuta reconciliacion de campanas en status `sending`.
+
+### FR-500: Manejo de Errores
+
+- **FR-501:** Errores transitorios (HTTP 5xx, timeout, errores de red) incrementan `retry_count` y devuelven la campana a status `scheduled`.
+- **FR-502:** Tras 3 reintentos fallidos, la campana pasa a status `failed` y se mueve a cola de errores con log critico.
+- **FR-503:** Errores permanentes (sin audiencia, audiencia vacia, error de template) cancelan la campana directamente sin gastar reintentos.
+- **FR-504:** Ante HTTP 429 de Mailchimp, el sistema espera el tiempo indicado en `Retry-After` antes de reintentar.
+
+## Non-Functional Requirements
+
+### Rendimiento
+
+- **NFR-01:** El worker procesa campanas pendientes con un margen maximo de 5 minutos respecto a `scheduled_at`.
+- **NFR-02:** Timeout de 5 segundos para cada llamada a servicios externos.
+
+### Resiliencia
+
+- **NFR-03:** El sistema sobrevive a reinicios del worker sin perder campanas (persistencia en BBDD).
+- **NFR-04:** El sistema se reconcilia con Mailchimp al arrancar para resolver estados inconsistentes.
+- **NFR-05:** Ningun fallo transitorio de un servicio externo causa perdida de una campana.
+
+### Observabilidad
+
+- **NFR-06:** Log critico para campanas que agotan reintentos, con editorial_id, error_type y error_message.
+- **NFR-07:** Log informativo para campanas canceladas (despublicacion, sin audiencia).
+- **NFR-08:** La tabla `campaigns` es consultable para auditar estado de cualquier envio.
+
+### Seguridad
+
+- **NFR-09:** Credenciales de Mailchimp API almacenadas en variables de entorno, nunca en codigo.

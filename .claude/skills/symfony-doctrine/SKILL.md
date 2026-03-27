@@ -23,25 +23,8 @@ Use when creating entities, repositories, migrations, or database queries.
 - Use QueryBuilder for complex queries, DQL for simple ones
 - Always inject `EntityManagerInterface`, not extend `ServiceEntityRepository`
 
-### Migrations
-- Generate: `php bin/console doctrine:migrations:diff`
-- Run: `php bin/console doctrine:migrations:migrate`
-- Always review generated SQL before committing
-
 ### Naming
 - Tables: plural, snake_case (`campaigns`, `notification_deliveries`)
 - Columns: snake_case (`editorial_id`, `scheduled_at`)
 - Indexes: `idx_table_columns` (`idx_campaigns_status_scheduled`)
 - Unique constraints: `uniq_table_columns`
-
-### Query Patterns
-```php
-// Use QueryBuilder for filtered queries
-$this->em->createQueryBuilder()
-    ->select('c')
-    ->from(Campaign::class, 'c')
-    ->where('c.status = :status')
-    ->setParameter('status', CampaignStatus::Scheduled->value)
-    ->getQuery()
-    ->getResult();
-```

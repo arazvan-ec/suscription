@@ -16,26 +16,7 @@ Load the change directory from `openspec/changes/[feature]/`:
 - `tasks.md` — checklist of implementation tasks
 
 ### 2. Generate Task File
-Create a consolidated task file that fresh-exec.sh can consume:
-
-```markdown
-# Task: [feature name]
-
-## Context
-[Summary from proposal.md]
-
-## Specs
-[Key specs with delta markers]
-
-## Design Decisions
-[Key decisions from design.md]
-
-## Implementation Tasks
-[Checklist from tasks.md]
-
-## Acceptance Criteria
-[Derived from specs — each ADDED/MODIFIED item becomes a criterion]
-```
+Create a consolidated task file that fresh-exec.sh can consume.
 
 ### 3. Inject Relevant Skills
 Based on keywords in the specs, the bridge identifies which Symfony skills

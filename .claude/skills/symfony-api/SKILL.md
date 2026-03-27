@@ -28,12 +28,10 @@ All errors return `application/problem+json`:
 }
 ```
 
-Create a `ProblemJsonResponse` helper or use `JsonResponse` with the right structure.
-
 ### Route Naming
-- `GET /editorials/{id}` → `app_editorial_show`
-- `POST /editorials` → `app_editorial_create`
-- `GET /health` → `app_health`
+- `GET /editorials/{id}` -> `app_editorial_show`
+- `POST /editorials` -> `app_editorial_create`
+- `GET /health` -> `app_health`
 
 ### Health Endpoint
 Every service must have `GET /health` returning:

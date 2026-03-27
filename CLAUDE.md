@@ -1,4 +1,4 @@
-# enBandeja-service
+# Mi Proyecto
 
 ## Workflow
 
@@ -7,15 +7,15 @@ La guia completa esta en `docs/workflow-guide.md`.
 
 ### Flujos disponibles
 
-- **Proyecto nuevo / feature compleja:** BMAD fases 1-3 → ECC ejecucion
-- **Feature en servicio existente:** OpenSpec → ECC ejecucion
+- **Proyecto nuevo / feature compleja:** BMAD fases 1-3 -> ECC ejecucion
+- **Feature en servicio existente:** OpenSpec -> ECC ejecucion
 - **Bug / cambio menor:** bmad-quick-dev o Claude Code directo
 
 ### Referencia rapida
 
 | Quiero... | Comando |
-|-----------|---------|
-| Planificar proyecto nuevo | bmad-analyst → bmad-pm → bmad-architect |
+|-----------|----------|
+| Planificar proyecto nuevo | bmad-analyst -> bmad-pm -> bmad-architect |
 | Especificar feature brownfield | /opsx:propose "descripcion" |
 | Investigar antes de planificar | deep-research "tema" |
 | Verificar specs antes de codear | readiness-gate |
@@ -23,7 +23,6 @@ La guia completa esta en `docs/workflow-guide.md`.
 | Implementar + QA automatico | ./.claude/scripts/qa-loop.sh task.md 3 |
 | Implementar en paralelo | ./.claude/scripts/parallel-tasks.sh a.md b.md |
 | Code review adversarial | bmad-code-review |
-| Edge case analysis | bmad-review-edge-case-hunter |
 | Bug fix rapido | bmad-quick-dev |
 | CI fallo, diagnosticar | ./.claude/scripts/ci-reactor.sh log.txt |
 
@@ -49,9 +48,3 @@ La guia completa esta en `docs/workflow-guide.md`.
 ### Git
 - Commits atomicos: un cambio logico por commit
 - Formato: `type: descripcion` (init, feat, fix, refactor, test, docs, setup, ext, chore)
-
-### Integraciones
-- editorial-service: datos de editoriales
-- journalist-service: datos de periodistas
-- Mailchimp Marketing API v3: envio de campanas
-- Clients via HTTPlug con plugins de retry/timeout

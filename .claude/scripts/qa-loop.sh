@@ -20,10 +20,10 @@ set -euo pipefail
 # --- Configuration ---
 PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-FRESH_DEV="$SCRIPT_DIR/fresh-dev-story.sh"
+FRESH_DEV="$SCRIPT_DIR/fresh-exec.sh"
 PROJECT_CONTEXT="$PROJECT_ROOT/_bmad-output/project-context.md"
 ARCHITECTURE="$PROJECT_ROOT/_bmad-output/planning-artifacts/architecture.md"
-QA_SKILL="$PROJECT_ROOT/.claude/skills/qa-evaluator/SKILL.md"
+QA_SKILL="$PROJECT_ROOT/.claude/skills/bmad-agent-qa/SKILL.md"
 
 # --- Validation ---
 if [[ $# -lt 1 ]]; then
@@ -43,8 +43,8 @@ if [[ ! -f "$STORY_FILE" ]]; then
 fi
 
 if [[ ! -f "$QA_SKILL" ]]; then
-    echo "ERROR: QA evaluator skill not found: $QA_SKILL"
-    echo "Create .claude/skills/qa-evaluator/SKILL.md first."
+    echo "ERROR: QA skill not found: $QA_SKILL"
+    echo "Ensure BMAD QA agent is installed."
     exit 1
 fi
 

@@ -15,7 +15,6 @@ ARCHITECTURE="$PROJECT_ROOT/_bmad-output/planning-artifacts/architecture.md"
 SKILLS_DIR="$PROJECT_ROOT/.claude/skills"
 TIMEOUT="${FRESH_EXEC_TIMEOUT:-600}"
 
-# --- Validation ---
 if [[ $# -lt 1 ]]; then
     echo "Usage: $0 <task-file> [extra-context-files...]"
     exit 1
@@ -29,12 +28,10 @@ if [[ ! -f "$TASK_FILE" ]]; then
     exit 1
 fi
 
-# --- Auto-detect Symfony skills by keywords in task file ---
 detect_skills() {
     local task_content
     task_content="$(cat "$TASK_FILE")"
     local detected=()
-
     if echo "$task_content" | grep -qiE "controller|endpoint|API|route|request|response"; then
         detected+=("symfony-api")
     fi
@@ -47,11 +44,9 @@ detect_skills() {
     if echo "$task_content" | grep -qiE "cache|CDN|Vary|Transparent Edge|purge|ttl"; then
         detected+=("cdn-caching")
     fi
-
     echo "${detected[@]}"
 }
 
-# --- Build prompt ---
 PROMPT="You are a senior developer implementing a task for a Symfony project.
 
 ## CRITICAL RULES
@@ -63,75 +58,35 @@ PROMPT="You are a senior developer implementing a task for a Symfony project.
 - Use domain interfaces for dependencies (final classes can't be mocked).
 "
 
-# Add project context
 if [[ -f "$PROJECT_CONTEXT" ]]; then
-    PROMPT+="
-## PROJECT CONTEXT
-<project-context>
-$(cat "$PROJECT_CONTEXT")
-</project-context>
-"
+    PROMPT+="\n## PROJECT CONTEXT\n<project-context>\n$(cat "$PROJECT_CONTEXT")\n</project-context>\n"
 fi
 
-# Add architecture
 if [[ -f "$ARCHITECTURE" ]]; then
-    PROMPT+="
-## ARCHITECTURE
-<architecture>
-$(cat "$ARCHITECTURE")
-</architecture>
-"
+    PROMPT+="\n## ARCHITECTURE\n<architecture>\n$(cat "$ARCHITECTURE")\n</architecture>\n"
 fi
 
-# Auto-detect and inject Symfony skills
 DETECTED_SKILLS=($(detect_skills))
 if [[ ${#DETECTED_SKILLS[@]} -gt 0 ]]; then
     echo "Auto-detected skills: ${DETECTED_SKILLS[*]}"
     for skill in "${DETECTED_SKILLS[@]}"; do
         skill_file="$SKILLS_DIR/$skill/SKILL.md"
         if [[ -f "$skill_file" ]]; then
-            PROMPT+="
-## SKILL: $skill
-<skill>
-$(cat "$skill_file")
-</skill>
-"
+            PROMPT+="\n## SKILL: $skill\n<skill>\n$(cat "$skill_file")\n</skill>\n"
         fi
     done
 fi
 
-# Add extra context files
 for extra_file in "$@"; do
     if [[ -f "$extra_file" ]]; then
-        PROMPT+="
-## ADDITIONAL CONTEXT: $(basename "$extra_file")
-<additional-context>
-$(cat "$extra_file")
-</additional-context>
-"
+        PROMPT+="\n## ADDITIONAL CONTEXT: $(basename "$extra_file")\n<additional-context>\n$(cat "$extra_file")\n</additional-context>\n"
     else
         echo "WARNING: Extra context file not found, skipping: $extra_file"
     fi
 done
 
-# Add the task
-PROMPT+="
-## TASK TO IMPLEMENT
-<task>
-$(cat "$TASK_FILE")
-</task>
+PROMPT+="\n## TASK TO IMPLEMENT\n<task>\n$(cat "$TASK_FILE")\n</task>\n\n## YOUR TASK\n1. Read and understand the task and its acceptance criteria.\n2. Plan the implementation.\n3. Write the tests first (PHPUnit).\n4. Implement the code to make the tests pass.\n5. Run php bin/phpunit to verify all tests pass.\n6. Make atomic commits for each logical change.\n7. Summarize what you did.\n"
 
-## YOUR TASK
-1. Read and understand the task and its acceptance criteria.
-2. Plan the implementation (list the files you'll create/modify).
-3. Write the tests first (PHPUnit).
-4. Implement the code to make the tests pass.
-5. Run \`php bin/phpunit\` to verify all tests pass.
-6. Make atomic commits for each logical change.
-7. Summarize what you did and any decisions you made.
-"
-
-# --- Execute ---
 echo "=== Fresh Exec ==="
 echo "Task: $TASK_FILE"
 [[ -f "$PROJECT_CONTEXT" ]] && echo "Context: $PROJECT_CONTEXT"

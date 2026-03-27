@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 # worktree-exec.sh — Execute a task in an isolated git worktree
 #
-# Creates a temporary worktree so the sub-agent works on an isolated copy.
-# Changes are committed in the worktree branch and can be merged after review.
-#
 # Usage:
 #   ./.claude/scripts/worktree-exec.sh <task-file> [extra-context-files...]
 
@@ -22,7 +19,6 @@ if [[ ! -f "$TASK_FILE" ]]; then
     exit 1
 fi
 
-# --- Create worktree ---
 TASK_NAME="$(basename "$TASK_FILE" .md)"
 BRANCH_NAME="worktree/${TASK_NAME}-$(date +%Y%m%d-%H%M%S)"
 WORKTREE_DIR="/tmp/worktree-${TASK_NAME}-$$"
@@ -36,17 +32,13 @@ echo ""
 
 git worktree add -b "$BRANCH_NAME" "$WORKTREE_DIR" HEAD
 
-# --- Execute fresh-exec in the worktree ---
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
 (
     cd "$WORKTREE_DIR"
     "$SCRIPT_DIR/fresh-exec.sh" "$@"
 )
-
 EXIT_CODE=$?
 
-# --- Report ---
 COMMIT_COUNT=$(cd "$WORKTREE_DIR" && git log --oneline "HEAD...HEAD~10" 2>/dev/null | head -10 | wc -l)
 echo ""
 echo "=== Worktree Results ==="

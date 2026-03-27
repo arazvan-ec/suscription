@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 # ci-reactor.sh — Diagnose and fix CI failures automatically
 #
-# Reads a CI log, classifies the failure, and attempts a fix.
-# Only auto-commits if confidence is HIGH and tests pass.
-#
 # Usage:
 #   ./.claude/scripts/ci-reactor.sh <ci-log-file-or-url>
 
@@ -19,7 +16,6 @@ fi
 
 CI_LOG_SOURCE="$1"
 
-# --- Resolve CI log content ---
 if [[ -f "$CI_LOG_SOURCE" ]]; then
     CI_LOG_CONTENT="$(cat "$CI_LOG_SOURCE")"
 elif [[ "$CI_LOG_SOURCE" == http* ]]; then
@@ -29,38 +25,23 @@ else
     exit 1
 fi
 
-# --- Build prompt ---
-PROMPT="You are a CI/CD diagnostic agent. Your job is to analyze a CI failure log,
-classify the issue, and fix it if possible.
+PROMPT="You are a CI/CD diagnostic agent. Analyze the CI failure log, classify the issue, and fix it if possible.
 
-## CRITICAL RULES
-- Classify confidence: HIGH (obvious fix, like a typo or missing import),
-  MEDIUM (likely fix but needs verification), LOW (unclear root cause).
-- Only make changes if you can fix the issue. Do NOT make speculative changes.
-- After fixing, run \`php bin/phpunit\` to verify.
-- If tests pass after your fix, commit with message: 'fix: [description] (ci-reactor)'
-- If tests don't pass or confidence is LOW, do NOT commit. Just report findings.
+## RULES
+- Classify confidence: HIGH, MEDIUM, LOW.
+- Only commit if HIGH confidence and tests pass.
+- After fixing, run php bin/phpunit to verify.
 
 ## PROJECT CONTEXT
-<project-context>
 $(cat "$PROJECT_CONTEXT" 2>/dev/null || echo "No project context available.")
-</project-context>
 
 ## CI FAILURE LOG
-<ci-log>
 $CI_LOG_CONTENT
-</ci-log>
 
-## YOUR TASK
-1. Read the CI log and identify the failure(s).
-2. Classify each failure: type (test failure, lint error, build error, dependency issue)
-   and confidence (HIGH/MEDIUM/LOW).
-3. For HIGH confidence fixes: make the fix, run tests, commit if green.
-4. For MEDIUM/LOW: describe the issue and suggested fix without committing.
-5. Output a summary report with:
-   - Failures found
-   - Classification and confidence
-   - Actions taken (or recommended)
+## TASK
+1. Identify failures.
+2. Classify each: type and confidence.
+3. HIGH: fix, test, commit. MEDIUM/LOW: report only.
 "
 
 echo "=== CI Reactor ==="
